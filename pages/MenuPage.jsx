@@ -34,7 +34,7 @@ const MenuPage = () => {
     const verifySession = async () => {
       try {
         await axios.get(
-          `${host}/api/qr/verify`,
+          `https://qrrestaurant-server.onrender.com/api/qr/verify`,
           { withCredentials: true }
         );
         setLoading(false);
