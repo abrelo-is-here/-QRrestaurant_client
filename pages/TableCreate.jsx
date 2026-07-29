@@ -28,7 +28,7 @@ function TableCreate() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        `${host}/api/qr/generate`,
+        `https://qrrestaurant-server.onrender.com/api/qr/generate`,
         { tableNumber: tableNumber },
         { headers: { Authorization: `Bearer ${token}` } }
       );
