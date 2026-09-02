@@ -12,30 +12,46 @@ import {
   ImageIcon
 } from "lucide-react";
 import { host } from "../lib/Api";
+
 const MenuPage = () => {
   const { restaurantId } = useParams();
-  console.log('res ID' , restaurantId);
   const [searchParams] = useSearchParams();
   const tableNumber = searchParams.get("table");
+  const urlSessionId = searchParams.get("sessionId"); // 🔥 Extract sessionId from URL
 
   const [categories, setCategories] = useState([]);
   const [menu, setMenu] = useState([]);
   const [cart, setCart] = useState([]);
-  const [orderType, setOrderType] = useState("dine-in"); // Added back
+  const [orderType, setOrderType] = useState("dine-in");
   const [activeCategory, setActiveCategory] = useState("all");
   const [showCart, setShowCart] = useState(false);
   const [specialRequests, setSpecialRequests] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const [rate, setRate] = useState("");
-  console.log('currency rate in menu page:' , rate);
 
+  // 🔥 1. Session Verification with Header & LocalStorage Fallback
   useEffect(() => {
+    // If sessionId exists in URL params, persist it to localStorage
+    if (urlSessionId) {
+      localStorage.setItem("qrSessionId", urlSessionId);
+    }
+
     const verifySession = async () => {
+      const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
+
       try {
         await axios.get(
           `https://qrrestaurant-server.onrender.com/api/qr/verify`,
-          { withCredentials: true }
+          {
+            headers: {
+              "x-session-id": activeSessionId || "" // 🔥 Send session ID in header
+            },
+            params: {
+              sessionId: activeSessionId || ""
+            },
+            withCredentials: true
+          }
         );
         setLoading(false);
       } catch (err) {
@@ -43,25 +59,25 @@ const MenuPage = () => {
         navigate("/invalid-access");
       }
     };
+
     verifySession();
-  }, [navigate]);
+  }, [navigate, urlSessionId]);
 
   // Fetch currency rate
-   useEffect(() => {
-  if (!restaurantId) return;
-  const fetchRate = async () => {
-    try {
-      const res = await axios.get(`${host}/api/rates/${restaurantId}`);
-      setRate(res.data?.rate);
-      console.log('objec:' , res.data)
-    } catch (err) {
-      console.error(err);
-      setRate(null);
-    }
-  };
+  useEffect(() => {
+    if (!restaurantId) return;
+    const fetchRate = async () => {
+      try {
+        const res = await axios.get(`${host}/api/rates/${restaurantId}`);
+        setRate(res.data?.rate);
+      } catch (err) {
+        console.error(err);
+        setRate(null);
+      }
+    };
 
-  fetchRate();
-}, [restaurantId]);
+    fetchRate();
+  }, [restaurantId]);
 
   const fetchData = async () => {
     try {
@@ -90,35 +106,35 @@ const MenuPage = () => {
     );
   }
 
-const addToCart = (item) => {
-  const price =
-    orderType === "takeaway"
-      ? item.takeawayPrice
-      : item.dineInPrice;
+  const addToCart = (item) => {
+    const price =
+      orderType === "takeaway"
+        ? item.takeawayPrice
+        : item.dineInPrice;
 
-  setCart(prev => {
-    const exists = prev.find(i => i._id === item._id);
+    setCart(prev => {
+      const exists = prev.find(i => i._id === item._id);
 
-    if (exists) {
-      return prev.map(i =>
-        i._id === item._id
-          ? { ...i, quantity: i.quantity + 1 }
-          : i
-      );
-    }
-
-    return [
-      ...prev,
-      {
-        _id: item._id,
-        name: item.name,
-        dineInPrice: item.dineInPrice,
-        takeawayPrice: item.takeawayPrice,
-        quantity: 1
+      if (exists) {
+        return prev.map(i =>
+          i._id === item._id
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
       }
-    ];
-  });
-};
+
+      return [
+        ...prev,
+        {
+          _id: item._id,
+          name: item.name,
+          dineInPrice: item.dineInPrice,
+          takeawayPrice: item.takeawayPrice,
+          quantity: 1
+        }
+      ];
+    });
+  };
 
   const removeFromCart = (itemId) => setCart(prev => prev.filter(item => item._id !== itemId));
 
@@ -129,65 +145,67 @@ const addToCart = (item) => {
     );
   };
 
-  // Pricing Logic (Integrated from old code)
+  // Pricing Logic
   const subtotal = cart.reduce((acc, item) => {
-  const itemPrice =
-    orderType === "takeaway"
-      ? item.takeawayPrice
-      : item.dineInPrice;
+    const itemPrice =
+      orderType === "takeaway"
+        ? item.takeawayPrice
+        : item.dineInPrice;
 
-  return acc + itemPrice * item.quantity;
-}, 0);
+    return acc + itemPrice * item.quantity;
+  }, 0);
 
+  const totalPrice = subtotal;
 
-  const takeawayBox = orderType === "takeaway" 
-    ? 60 * cart.reduce((acc, item) => acc + item.quantity, 0) 
-    : 0;
-  const totalPrice = subtotal ;
-
+  // 🔥 2. Place Order with session header attached
   const placeOrder = async () => {
-  if (cart.length === 0) return alert("Cart is empty!");
+    if (cart.length === 0) return alert("Cart is empty!");
 
-  try {
-    const res = await axios.post(
-      `${host}/api/orders`,
-      {
-        restaurantId: restaurantId,
-        tableNumber: String(tableNumber),
-        specialRequests,
-        isTakeaway: orderType === "takeaway",
-        totalPrice,
-        items: cart.map(item => ({
-          menuItemId: item._id,
-          name: item.name,
-          price:
-            orderType === "takeaway"
-              ? item.takeawayPrice
-              : item.dineInPrice,
-          quantity: item.quantity
-        }))
-      },
-      { withCredentials: true }
-    );
+    const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
 
-    console.log("Ordered items:", res.data);
+    try {
+      const res = await axios.post(
+        `${host}/api/orders`,
+        {
+          restaurantId: restaurantId,
+          tableNumber: String(tableNumber),
+          specialRequests,
+          isTakeaway: orderType === "takeaway",
+          totalPrice,
+          items: cart.map(item => ({
+            menuItemId: item._id,
+            name: item.name,
+            price:
+              orderType === "takeaway"
+                ? item.takeawayPrice
+                : item.dineInPrice,
+            quantity: item.quantity
+          }))
+        },
+        { 
+          headers: {
+            "x-session-id": activeSessionId || "" // 🔥 Attach session ID here too
+          },
+          withCredentials: true 
+        }
+      );
 
-    navigate(`/order/${res.data._id}`);
+      navigate(`/order/${res.data._id}`);
 
-    setCart([]);
-    setSpecialRequests("");
-    setShowCart(false);
+      setCart([]);
+      setSpecialRequests("");
+      setShowCart(false);
 
-  } catch (error) {
-    console.error("CREATE ORDER ERROR:", error);
+    } catch (error) {
+      console.error("CREATE ORDER ERROR:", error);
 
-    alert(
-      error.response?.data?.message ||
-      error.message ||
-      "Order failed. Try again."
-    );
-  }
-};
+      alert(
+        error.response?.data?.message ||
+        error.message ||
+        "Order failed. Try again."
+      );
+    }
+  };
 
   const ItemImages = ({ images }) => {
     if (!images || images.length === 0) {
@@ -221,7 +239,7 @@ const addToCart = (item) => {
             </div>
           </div>
 
-          {/* Dine-In / Takeaway Toggle (Integrated) */}
+          {/* Dine-In / Takeaway Toggle */}
           <div className="flex bg-emerald-50 p-1 rounded-xl border border-emerald-100">
             <button 
               onClick={() => setOrderType("dine-in")}
@@ -278,12 +296,9 @@ const addToCart = (item) => {
                         <div className="flex justify-between items-end">
                           <div>
                             <span className="block text-[10px] font-bold text-emerald-600/50 uppercase tracking-tighter">Price</span>
-                          <span className="text-xl font-black text-emerald-700 leading-none">
-                                    {orderType === "takeaway"
-                                      ? item.takeawayPrice
-                                      : item.dineInPrice
-                                    } Etb
-                                  </span>
+                            <span className="text-xl font-black text-emerald-700 leading-none">
+                              {orderType === "takeaway" ? item.takeawayPrice : item.dineInPrice} Etb
+                            </span>
                           </div>
                           <button 
                             onClick={() => addToCart(item)}
@@ -349,8 +364,8 @@ const addToCart = (item) => {
                     <div>
                       <h4 className="font-bold text-slate-800 text-base">{item.name}</h4>
                       <p className="text-[11px] font-black text-emerald-600 uppercase tracking-widest">
-                                {orderType === "takeaway" ? item.takeawayPrice : item.dineInPrice} ETB
-                              </p>
+                        {orderType === "takeaway" ? item.takeawayPrice : item.dineInPrice} ETB
+                      </p>
                     </div>
                   </div>
                   <button onClick={() => removeFromCart(item._id)} className="text-emerald-200 hover:text-red-400 transition-colors p-2">
@@ -374,14 +389,13 @@ const addToCart = (item) => {
               />
             </div>
 
-            {/* Summary & Checkout (Integrated Fees) */}
+            {/* Summary & Checkout */}
             <div className="bg-emerald-800 rounded-[35px] p-8 text-white shadow-2xl">
               <div className="bg-white/10 p-6 rounded-[28px] border border-white/20 mb-8 space-y-2">
                 <div className="flex justify-between text-xs font-bold opacity-70 uppercase tracking-widest">
                   <span>Subtotal</span>
                   <span>{subtotal.toLocaleString()} ETB</span>
                 </div>
-                
                 
                 <div className="h-px bg-white/20 my-4" />
 
