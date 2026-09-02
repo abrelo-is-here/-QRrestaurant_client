@@ -30,38 +30,40 @@ const MenuPage = () => {
   const navigate = useNavigate();
   const [rate, setRate] = useState("");
 
+
+
   // 🔥 1. Session Verification with Header & LocalStorage Fallback
   useEffect(() => {
-    // If sessionId exists in URL params, persist it to localStorage
-    if (urlSessionId) {
-      localStorage.setItem("qrSessionId", urlSessionId);
+  // Store token immediately if present in URL
+  if (urlSessionId) {
+    localStorage.setItem("qrSessionId", urlSessionId);
+  }
+
+  const verifySession = async () => {
+    const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
+
+    try {
+      await axios.get(
+        `https://qrrestaurant-server.onrender.com/api/qr/verify`,
+        {
+          headers: {
+            "x-session-id": activeSessionId || "" // 🔥 Send in header
+          },
+          params: {
+            sessionId: activeSessionId || ""
+          },
+          withCredentials: true
+        }
+      );
+      setLoading(false);
+    } catch (err) {
+      console.error("QR session verification failed", err);
+      navigate("/invalid-access");
     }
+  };
 
-    const verifySession = async () => {
-      const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
-
-      try {
-        await axios.get(
-          `https://qrrestaurant-server.onrender.com/api/qr/verify`,
-          {
-            headers: {
-              "x-session-id": activeSessionId || "" // 🔥 Send session ID in header
-            },
-            params: {
-              sessionId: activeSessionId || ""
-            },
-            withCredentials: true
-          }
-        );
-        setLoading(false);
-      } catch (err) {
-        console.error("QR session verification failed", err);
-        navigate("/invalid-access");
-      }
-    };
-
-    verifySession();
-  }, [navigate, urlSessionId]);
+  verifySession();
+}, [navigate, urlSessionId]);
 
   // Fetch currency rate
   useEffect(() => {
@@ -159,53 +161,44 @@ const MenuPage = () => {
 
   // 🔥 2. Place Order with session header attached
   const placeOrder = async () => {
-    if (cart.length === 0) return alert("Cart is empty!");
+  if (cart.length === 0) return alert("Cart is empty!");
 
-    const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
+  const activeSessionId = urlSessionId || localStorage.getItem("qrSessionId");
 
-    try {
-      const res = await axios.post(
-        `${host}/api/orders`,
-        {
-          restaurantId: restaurantId,
-          tableNumber: String(tableNumber),
-          specialRequests,
-          isTakeaway: orderType === "takeaway",
-          totalPrice,
-          items: cart.map(item => ({
-            menuItemId: item._id,
-            name: item.name,
-            price:
-              orderType === "takeaway"
-                ? item.takeawayPrice
-                : item.dineInPrice,
-            quantity: item.quantity
-          }))
+  try {
+    const res = await axios.post(
+      `${host}/api/orders`,
+      {
+        restaurantId: restaurantId,
+        tableNumber: String(tableNumber),
+        specialRequests,
+        isTakeaway: orderType === "takeaway",
+        totalPrice,
+        items: cart.map(item => ({
+          menuItemId: item._id,
+          name: item.name,
+          price: orderType === "takeaway" ? item.takeawayPrice : item.dineInPrice,
+          quantity: item.quantity
+        }))
+      },
+      {
+        headers: {
+          "x-session-id": activeSessionId || "" // 🔥 Pass session ID
         },
-        { 
-          headers: {
-            "x-session-id": activeSessionId || "" // 🔥 Attach session ID here too
-          },
-          withCredentials: true 
-        }
-      );
+        withCredentials: true
+      }
+    );
 
-      navigate(`/order/${res.data._id}`);
+    navigate(`/order/${res.data._id}`);
+    setCart([]);
+    setSpecialRequests("");
+    setShowCart(false);
 
-      setCart([]);
-      setSpecialRequests("");
-      setShowCart(false);
-
-    } catch (error) {
-      console.error("CREATE ORDER ERROR:", error);
-
-      alert(
-        error.response?.data?.message ||
-        error.message ||
-        "Order failed. Try again."
-      );
-    }
-  };
+  } catch (error) {
+    console.error("CREATE ORDER ERROR:", error);
+    alert(error.response?.data?.message || error.message || "Order failed. Try again.");
+  }
+};
 
   const ItemImages = ({ images }) => {
     if (!images || images.length === 0) {
