@@ -49,7 +49,7 @@ function Restaurants() {
           Authorization: `Bearer ${token}`,
         },
       });
-
+      console.log(res.data)
       setOwners(res.data);
     } catch (err) {
       console.error(err);
