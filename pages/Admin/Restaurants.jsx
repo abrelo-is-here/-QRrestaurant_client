@@ -1,4 +1,3 @@
-```jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../lib/AuthContext";
@@ -384,4 +383,4 @@ function Restaurants() {
 }
 
 export default Restaurants;
-```
+
